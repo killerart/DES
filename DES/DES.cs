@@ -310,7 +310,7 @@ namespace DES {
         private static byte[] GetKeyBytes(string key) {
             const int keyLength = 8;
             var       keyBytes  = new byte[keyLength];
-            Encoding.Default.GetBytes(key, keyBytes);
+            Encoding.Default.GetBytes(key).AsSpan()[..8].CopyTo(keyBytes);
             return keyBytes;
         }
     }
