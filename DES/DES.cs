@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Text;
 
 namespace DES {
@@ -116,41 +117,38 @@ namespace DES {
         };
 
         public static byte[] Encrypt(string message, string key) {
-            var messageBytes  = Encoding.Default.GetBytes(message);
-            var messageLength = messageBytes.Length;
-            if (messageLength % 8 != 0) {
-                messageLength += 8 - messageLength % 8;
-            }
-
-            var messageSpan = new Span<byte>(new byte[messageLength]);
-            messageBytes.CopyTo(messageSpan);
-
-            return Des(messageSpan, GetKeyBytes(key), true);
+            var messageBytes = Encoding.Default.GetBytes(message);
+            return Des(messageBytes, GetKeyBytes(key), true);
         }
 
-        public static string Decrypt(byte[] encryptedMessage, string key) {
-            var messageLength = encryptedMessage.Length;
-            if (messageLength % 8 != 0) {
-                messageLength += 8 - messageLength % 8;
-            }
-
-            var messageSpan = new Span<byte>(new byte[messageLength]);
-            encryptedMessage.CopyTo(messageSpan);
-
-            return Encoding.Default.GetString(Des(messageSpan, GetKeyBytes(key), false));
+        public static string Decrypt(ReadOnlySpan<byte> encryptedMessage, string key) {
+            var decryptedMessage = Des(encryptedMessage, GetKeyBytes(key), false);
+            return Encoding.Default.GetString(decryptedMessage);
         }
 
-        private static byte[] Des(Span<byte> message, byte[] keyBytes, bool encrypt) {
-            var numOfParts = message.Length / 8;
+        private static byte[] EnlargeMessage(ReadOnlySpan<byte> originalMessage) {
+            var length = originalMessage.Length;
+            if (length % 8 != 0) {
+                length += 8 - length % 8;
+            }
+
+            var enlargedMessage = new byte[length];
+            originalMessage.CopyTo(enlargedMessage);
+            return enlargedMessage;
+        }
+
+        private static byte[] Des(ReadOnlySpan<byte> originalMessage, byte[] keyBytes, bool encrypt) {
+            var messageBytes = EnlargeMessage(originalMessage);
+            var numOfParts   = messageBytes.Length / 8;
 
             var subKeys = CreateSubKeys(keyBytes);
 
             for (var i = 0; i < numOfParts; i++) {
-                var part = message.Slice(i * 8, 8);
-                FeistelCypher(encrypt, part, subKeys);
+                var messagePart = messageBytes.AsSpan().Slice(i * 8, 8);
+                FeistelCypher(messagePart, subKeys, encrypt);
             }
 
-            return message.ToArray();
+            return messageBytes;
         }
 
         private static BitArray[] CreateSubKeys(byte[] keyBytes) {
@@ -186,7 +184,7 @@ namespace DES {
             return subKeys;
         }
 
-        private static void FeistelCypher(bool encrypt, Span<byte> messageBytes, BitArray[] subKeys) {
+        private static void FeistelCypher(Span<byte> messageBytes, IReadOnlyList<BitArray> subKeys, bool encrypt) {
             messageBytes.Reverse();
             var messageBits = new BitArray(64);
             for (var i = 0; i < 8; i++) {
