@@ -141,37 +141,13 @@ namespace DES {
         }
 
         private static byte[] Des(Span<byte> message, byte[] keyBytes, bool encrypt) {
-            var numOfParts      = message.Length / 8;
-            var messageBits     = new BitArray(64);
-            var left            = new BitArray(32);
-            var right           = new BitArray(32);
-            var newLeft         = new BitArray(32);
-            var newRight        = new BitArray(32);
-            var extended        = new BitArray(48);
-            var rowBits         = new BitArray(2);
-            var columnBits      = new BitArray(4);
-            var tempByte        = new byte[1];
-            var tempByteArray   = new byte[8];
-            var tempOutputArray = new BitArray(64);
+            var numOfParts = message.Length / 8;
 
             var subKeys = CreateSubKeys(keyBytes);
 
             for (var i = 0; i < numOfParts; i++) {
                 var part = message.Slice(i * 8, 8);
-                FeistelCypher(encrypt,
-                              part,
-                              subKeys,
-                              messageBits,
-                              left,
-                              right,
-                              newLeft,
-                              newRight,
-                              extended,
-                              rowBits,
-                              columnBits,
-                              tempByte,
-                              tempByteArray,
-                              tempOutputArray);
+                FeistelCypher(encrypt, part, subKeys);
             }
 
             return message.ToArray();
@@ -210,21 +186,9 @@ namespace DES {
             return subKeys;
         }
 
-        private static void FeistelCypher(bool       encrypt,
-                                          Span<byte> messageBytes,
-                                          BitArray[] subKeys,
-                                          BitArray   messageBits,
-                                          BitArray   left,
-                                          BitArray   right,
-                                          BitArray   newLeft,
-                                          BitArray   newRight,
-                                          BitArray   extended,
-                                          BitArray   rowBits,
-                                          BitArray   columnBits,
-                                          byte[]     tempByte,
-                                          byte[]     tempByteArray,
-                                          BitArray   tempOutputArray) {
+        private static void FeistelCypher(bool encrypt, Span<byte> messageBytes, BitArray[] subKeys) {
             messageBytes.Reverse();
+            var messageBits = new BitArray(64);
             for (var i = 0; i < 8; i++) {
                 var messageByte = messageBytes[i];
                 for (var j = 0; j < 8; j++) {
@@ -232,68 +196,63 @@ namespace DES {
                 }
             }
 
+            var left  = new BitArray(32);
+            var right = new BitArray(32);
             for (var i = 0; i < 32; i++) {
                 left[31 - i]  = messageBits[64 - IP[i]];
                 right[31 - i] = messageBits[64 - IP[i + 32]];
             }
 
+            var temp = new BitArray(32);
             for (var i = 0; i < 16; i++) {
                 for (var j = 0; j < 32; j++) {
-                    newLeft[j] = right[j];
+                    temp[j] = right[j];
                 }
 
                 var subKey = encrypt ? subKeys[i] : subKeys[15 - i];
+                F(right, subKey);
+                right = right.Xor(left);
 
-                F(right, subKey, newRight, extended, rowBits, columnBits, tempByte);
-
-                right           = right.Xor(left);
-                (left, newLeft) = (newLeft, left);
+                (left, temp) = (temp, left);
             }
 
+            var leftRight = new BitArray(64);
             for (var i = 0; i < 32; i++) {
-                tempOutputArray[i]      = left[i];
-                tempOutputArray[i + 32] = right[i];
+                leftRight[i]      = left[i];
+                leftRight[i + 32] = right[i];
             }
 
             for (var i = 0; i < 64; i++) {
-                messageBits[63 - i] = tempOutputArray[64 - FP[i]];
+                messageBits[63 - i] = leftRight[64 - FP[i]];
             }
 
+            var tempByteArray = new byte[8];
             messageBits.CopyTo(tempByteArray, 0);
             tempByteArray.CopyTo(messageBytes);
             messageBytes.Reverse();
         }
 
-        private static void F(BitArray right,
-                              BitArray subKey,
-                              BitArray newRight,
-                              BitArray extended,
-                              BitArray rowBits,
-                              BitArray columnBits,
-                              byte[]   tempByte) {
+        private static void F(BitArray right, BitArray subKey) {
+            var extended = new BitArray(48);
             for (var j = 0; j < 48; j++) {
                 extended[47 - j] = right[32 - EP[j]];
             }
 
             var result = extended.Xor(subKey);
+
+            var newRight = new BitArray(32);
+
             for (var j = 0; j < 8; j++) {
                 var pack = j * 6;
 
-                rowBits[0] = result[pack];
-                rowBits[1] = result[pack + 5];
+                byte row = 0;
+                row |= Convert.ToByte(result[pack]);
+                row |= (byte)(Convert.ToInt32(result[pack + 5]) << 1);
 
-                columnBits[0] = result[pack + 1];
-                columnBits[1] = result[pack + 2];
-                columnBits[2] = result[pack + 3];
-                columnBits[3] = result[pack + 4];
-
-                tempByte[0] = 0;
-
-                rowBits.CopyTo(tempByte, 0);
-                var row = tempByte[0];
-
-                columnBits.CopyTo(tempByte, 0);
-                var column = tempByte[0];
+                byte column = 0;
+                for (var k = 0; k < 4; k++) {
+                    column |= (byte)(Convert.ToInt32(result[pack + k + 1]) << k);
+                }
 
                 var value = Sbox[7 - j, row, column];
 
