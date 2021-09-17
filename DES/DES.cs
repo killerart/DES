@@ -1,9 +1,7 @@
 ﻿using System;
-using System.Buffers;
 using System.Collections;
-using System.Text;
 using System.Linq;
-using System.Numerics;
+using System.Text;
 
 namespace DES {
     // ReSharper disable once InconsistentNaming
@@ -71,27 +69,30 @@ namespace DES {
         }
 
         private static BitArray[] CreateSubKeys(byte[] keyBytes) {
-            var keyBits   = new BitArray(keyBytes);
-            var left      = new bool[28];
-            var right     = new bool[28];
+            Array.Reverse(keyBytes);
+            var keyBits = new BitArray(keyBytes);
+            var left    = new bool[28];
+            var right   = new bool[28];
             for (var i = 0; i < 28; i++) {
-                left[i]  = keyBits[64 - K1P[i]];
-                right[i] = keyBits[64 - K2P[i]];
+                left[27 - i]  = keyBits[64 - K1P[i]];
+                right[27 - i] = keyBits[64 - K2P[i]];
             }
 
             var subKeys = new BitArray[16];
+            var temp    = new BitArray(56);
 
             for (var i = 0; i < 16; i++) {
                 left.Rotate(ShiftBits[i]);
                 right.Rotate(ShiftBits[i]);
+
                 var subKey = new BitArray(48);
                 for (var j = 0; j < 28; j++) {
-                    keyBits[j]      = left[j];
-                    keyBits[j + 28] = right[j];
+                    temp[j]      = right[j];
+                    temp[j + 28] = left[j];
                 }
 
                 for (var j = 0; j < 48; j++) {
-                    subKey[j] = keyBits[64 - CP[j]];
+                    subKey[47 - j] = temp[56 - CP[j]];
                 }
 
                 subKeys[i] = subKey;
@@ -114,6 +115,7 @@ namespace DES {
                                           byte[]     tempByte,
                                           byte[]     tempByteArray,
                                           BitArray   tempOutputArray) {
+            messageBytes.Reverse();
             for (var i = 0; i < 8; i++) {
                 var messageByte = messageBytes[i];
                 for (var j = 0; j < 8; j++) {
@@ -122,8 +124,8 @@ namespace DES {
             }
 
             for (var i = 0; i < 32; i++) {
-                left[i]  = messageBits[64 - IP[i]];
-                right[i] = messageBits[64 - IP[i + 32]];
+                left[31 - i]  = messageBits[64 - IP[i]];
+                right[31 - i] = messageBits[64 - IP[i + 32]];
             }
 
             for (var i = 0; i < 16; i++) {
@@ -131,46 +133,12 @@ namespace DES {
                     newLeft[j] = right[j];
                 }
 
-                for (var j = 0; j < 48; j++) {
-                    extended[j] = right[32 - EP[j]];
-                }
-
                 var subKey = encrypt ? subKeys[i] : subKeys[15 - i];
-                var result = extended.Xor(subKey);
 
-                for (var j = 0; j < 8; j++) {
-                    var pack = j * 6;
-
-                    rowBits[0] = result[pack];
-                    rowBits[1] = result[pack + 5];
-
-                    columnBits[0] = result[pack + 1];
-                    columnBits[1] = result[pack + 2];
-                    columnBits[2] = result[pack + 3];
-                    columnBits[3] = result[pack + 4];
-
-                    tempByte[0] = 0;
-                    
-                    rowBits.CopyTo(tempByte, 0);
-                    var row = tempByte[0];
-
-                    columnBits.CopyTo(tempByte, 0);
-                    var column = tempByte[0];
-
-                    var value = Sbox[j, row, column];
-
-                    for (var k = 0; k < 4; k++) {
-                        newRight[j * 4 + k] = Convert.ToBoolean(value >> k & 1);
-                    }
-                }
-
-                for (var j = 0; j < 32; j++) {
-                    right[j] = newRight[32 - P[j]];
-                }
+                F(right, subKey, newRight, extended, rowBits, columnBits, tempByte);
 
                 right           = right.Xor(left);
                 (left, newLeft) = (newLeft, left);
-                (left, right)   = (right, left);
             }
 
             for (var i = 0; i < 32; i++) {
@@ -179,11 +147,55 @@ namespace DES {
             }
 
             for (var i = 0; i < 64; i++) {
-                messageBits[i] = tempOutputArray[64 - FP[i]];
+                messageBits[63 - i] = tempOutputArray[64 - FP[i]];
             }
 
             messageBits.CopyTo(tempByteArray, 0);
+            Array.Reverse(tempByteArray);
             tempByteArray.CopyTo(messageBytes);
+        }
+
+        private static void F(BitArray right,
+                              BitArray subKey,
+                              BitArray newRight,
+                              BitArray extended,
+                              BitArray rowBits,
+                              BitArray columnBits,
+                              byte[]   tempByte) {
+            for (var j = 0; j < 48; j++) {
+                extended[47 - j] = right[32 - EP[j]];
+            }
+
+            var result = extended.Xor(subKey);
+            for (var j = 0; j < 8; j++) {
+                var pack = j * 6;
+
+                rowBits[0] = result[pack];
+                rowBits[1] = result[pack + 5];
+
+                columnBits[0] = result[pack + 1];
+                columnBits[1] = result[pack + 2];
+                columnBits[2] = result[pack + 3];
+                columnBits[3] = result[pack + 4];
+
+                tempByte[0] = 0;
+
+                rowBits.CopyTo(tempByte, 0);
+                var row = tempByte[0];
+
+                columnBits.CopyTo(tempByte, 0);
+                var column = tempByte[0];
+
+                var value = Sbox[7 - j, row, column];
+
+                for (var k = 0; k < 4; k++) {
+                    newRight[j * 4 + k] = Convert.ToBoolean(value >> k & 1);
+                }
+            }
+
+            for (var j = 0; j < 32; j++) {
+                right[31 - j] = newRight[32 - P[j]];
+            }
         }
 
         private static byte[] GetKeyBytes(string key) {

@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections;
+using System.Linq;
 
 namespace DES {
     public static class ArrayExtensions {
@@ -13,6 +15,14 @@ namespace DES {
             Array.Reverse(array, k, array.Length - k);
 
             return array;
+        }
+    }
+
+    public static class BitArrayExtensions {
+        public static string ToBinaryString(this BitArray bitArray) {
+            var byteArray = new byte[8];
+            bitArray.CopyTo(byteArray, 0);
+            return string.Join("", byteArray.Reverse().Select(b => Convert.ToString(b, 2).PadLeft(8, '0')))[(64 - bitArray.Length)..];
         }
     }
 }
