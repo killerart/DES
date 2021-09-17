@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace DES {
     // ReSharper disable once InconsistentNaming
@@ -143,10 +144,17 @@ namespace DES {
 
             var subKeys = CreateSubKeys(keyBytes);
 
+            var tasks = new Task[numOfParts];
+
             for (var i = 0; i < numOfParts; i++) {
-                var messagePart = messageBytes.AsSpan().Slice(i * 8, 8);
-                FeistelCypher(messagePart, subKeys, encrypt);
+                var k = i;
+                tasks[i] = Task.Run(() => {
+                    var messagePart = messageBytes.AsSpan().Slice(k * 8, 8);
+                    FeistelCypher(messagePart, subKeys, encrypt);
+                });
             }
+
+            Task.WaitAll(tasks);
 
             return messageBytes;
         }
