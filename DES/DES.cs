@@ -260,8 +260,8 @@ namespace DES {
             }
 
             messageBits.CopyTo(tempByteArray, 0);
-            Array.Reverse(tempByteArray);
             tempByteArray.CopyTo(messageBytes);
+            messageBytes.Reverse();
         }
 
         private static void F(BitArray right,
