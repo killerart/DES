@@ -4,8 +4,9 @@ using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
 
+// ReSharper disable InconsistentNaming
+
 namespace DES {
-    // ReSharper disable once InconsistentNaming
     public static class DES {
         private static readonly byte[] IP = {
             58, 50, 42, 34, 26, 18, 10, 2,
@@ -68,7 +69,7 @@ namespace DES {
             19, 13, 30, 6, 22, 11, 4, 25
         };
 
-        private static readonly byte[,,] Sbox = {
+        private static readonly byte[,,] SBox = {
             {
                 { 14, 4, 13, 1, 2, 15, 11, 8, 3, 10, 6, 12, 5, 9, 0, 7 },
                 { 0, 15, 7, 4, 14, 2, 13, 1, 10, 6, 12, 11, 9, 5, 3, 8 },
@@ -260,7 +261,7 @@ namespace DES {
                     column |= (byte)(Convert.ToInt32(result[pack + k + 1]) << k);
                 }
 
-                var value = Sbox[7 - j, row, column];
+                var value = SBox[7 - j, row, column];
 
                 for (var k = 0; k < 4; k++) {
                     newRight[j * 4 + k] = Convert.ToBoolean(value >> k & 1);
